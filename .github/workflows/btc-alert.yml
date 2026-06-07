@@ -1,0 +1,26 @@
+name: BTC Egan Alert
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # mỗi giờ (GitHub Actions min reliable = 1h)
+  workflow_dispatch:        # chạy tay bất cứ lúc nào
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run BTC alert
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python telegram_alert.py
