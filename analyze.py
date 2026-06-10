@@ -162,12 +162,21 @@ def get_signal(df: pd.DataFrame) -> dict:
     buy_score = sum([buy_rsi, buy_cross, buy_div])
     sell_score = sum([sell_rsi, sell_cross, sell_div])
 
-    if buy_score >= 2:
+    moderate_buy_ok = rsi <= 35 and trend == "UPTREND"
+    moderate_sell_ok = rsi >= 65 and trend == "DOWNTREND"
+
+    if buy_score == 3:
         signal = "BUY"
-        strength = "STRONG" if buy_score == 3 else "MODERATE"
-    elif sell_score >= 2:
+        strength = "STRONG"
+    elif buy_score == 2 and moderate_buy_ok:
+        signal = "BUY"
+        strength = "MODERATE"
+    elif sell_score == 3:
         signal = "SELL"
-        strength = "STRONG" if sell_score == 3 else "MODERATE"
+        strength = "STRONG"
+    elif sell_score == 2 and moderate_sell_ok:
+        signal = "SELL"
+        strength = "MODERATE"
     else:
         signal = "NEUTRAL"
         strength = "WEAK"

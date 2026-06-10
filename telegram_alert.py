@@ -122,14 +122,14 @@ def main():
     for tf, tf_label in TIMEFRAMES:
         try:
             sig = get_signal(tf)
-            if sig["signal"] != "NEUTRAL" and sig["strength"] == "STRONG":
+            if sig["signal"] != "NEUTRAL":
                 msg = format_message(sig, tf_label)
                 ok = send_telegram(msg)
                 status = "✅ sent" if ok else "❌ failed"
-                print(f"[{tf_label}] {sig['signal']} STRONG signal → Telegram {status}")
+                print(f"[{tf_label}] {sig['signal']} {sig['strength']} → Telegram {status}")
                 any_signal = True
             else:
-                print(f"[{tf_label}] No signal. RSI={sig['rsi']}, strength={sig['strength']}, Trend={sig['trend']}")
+                print(f"[{tf_label}] No signal. RSI={sig['rsi']}, Trend={sig['trend']}")
             futures = sig.get("futures")
             if futures and futures["direction"] != "NEUTRAL":
                 ok = send_futures_alert(futures)
