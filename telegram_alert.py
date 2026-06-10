@@ -27,6 +27,27 @@ def send_telegram(text: str):
     resp = requests.post(url, json=payload, timeout=10)
     return resp.ok
 
+def send_futures_alert(signal_dict: dict) -> bool:
+    d = signal_dict
+    if d["direction"] == "NEUTRAL":
+        return False
+    if d["direction"] == "LONG":
+        emoji = "🟢"
+        sl_label = "-1.5×ATR"
+        tp_label = "+3×ATR"
+    else:
+        emoji = "🔴"
+        sl_label = "+1.5×ATR"
+        tp_label = "-3×ATR"
+    text = (
+        f"{emoji} <b>{d['direction']} BTC/USDT Perp</b>\n"
+        f"Entry: <b>${d['entry']:,.2f}</b>\n"
+        f"SL: ${d['sl']:,.2f} ({sl_label})\n"
+        f"TP: ${d['tp']:,.2f} ({tp_label})\n"
+        f"RR: 1:2 | ATR: ${d['atr']:,.2f}"
+    )
+    return send_telegram(text)
+
 def get_signal(timeframe: str) -> dict:
     result = subprocess.run(
         ["python", os.path.join(SCRIPT_DIR, "analyze.py"),
@@ -101,14 +122,19 @@ def main():
     for tf, tf_label in TIMEFRAMES:
         try:
             sig = get_signal(tf)
-            if sig["signal"] != "NEUTRAL":
+            if sig["signal"] != "NEUTRAL" and sig["strength"] == "STRONG":
                 msg = format_message(sig, tf_label)
                 ok = send_telegram(msg)
                 status = "✅ sent" if ok else "❌ failed"
-                print(f"[{tf_label}] {sig['signal']} signal → Telegram {status}")
+                print(f"[{tf_label}] {sig['signal']} STRONG signal → Telegram {status}")
                 any_signal = True
             else:
-                print(f"[{tf_label}] No signal. RSI={sig['rsi']}, Trend={sig['trend']}")
+                print(f"[{tf_label}] No signal. RSI={sig['rsi']}, strength={sig['strength']}, Trend={sig['trend']}")
+            futures = sig.get("futures")
+            if futures and futures["direction"] != "NEUTRAL":
+                ok = send_futures_alert(futures)
+                status = "✅ sent" if ok else "❌ failed"
+                print(f"[{tf_label}] Futures {futures['direction']} alert → Telegram {status}")
         except Exception as e:
             print(f"[{tf_label}] Error: {e}")
 
