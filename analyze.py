@@ -63,11 +63,23 @@ def calc_wma(series: pd.Series, period: int) -> pd.Series:
         return np.dot(x[-period:], weights) / weights.sum()
     return series.rolling(window=period).apply(wma_window, raw=True)
 
+def calc_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high = df["high"]
+    low = df["low"]
+    prev_close = df["close"].shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs()
+    ], axis=1).max(axis=1)
+    return tr.ewm(span=period, adjust=False).mean()
+
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["rsi"] = calc_rsi(df["close"], 14)
     df["ema9_rsi"] = calc_ema(df["rsi"], 9)
     df["wma45_rsi"] = calc_wma(df["rsi"], 45)
+    df["atr"] = calc_atr(df, 14)
     return df.dropna(subset=["rsi", "ema9_rsi", "wma45_rsi"])
 
 # ── Divergence detection ────────────────────────────────────────────────────
@@ -182,6 +194,34 @@ def get_signal(df: pd.DataFrame) -> dict:
         "tp2_buy": round(price * 1.04, 2),
         "tp1_sell": round(price * 0.98, 2),
         "tp2_sell": round(price * 0.96, 2),
+    }
+
+# ── Futures signal ──────────────────────────────────────────────────────────
+def get_futures_signal(df: pd.DataFrame) -> dict:
+    sig = get_signal(df)
+    last = df.iloc[-1]
+    atr = last["atr"] if not np.isnan(last["atr"]) else 0.0
+    entry = sig["price"]
+
+    if sig["signal"] == "BUY" and sig["strength"] == "STRONG":
+        direction = "LONG"
+        sl = entry - 1.5 * atr
+        tp = entry + 3.0 * atr
+    elif sig["signal"] == "SELL" and sig["strength"] == "STRONG":
+        direction = "SHORT"
+        sl = entry + 1.5 * atr
+        tp = entry - 3.0 * atr
+    else:
+        direction = "NEUTRAL"
+        sl = entry
+        tp = entry
+
+    return {
+        "direction": direction,
+        "entry": round(entry, 2),
+        "sl": round(sl, 2),
+        "tp": round(tp, 2),
+        "atr": round(atr, 2),
     }
 
 # ── Backtest ────────────────────────────────────────────────────────────────
@@ -318,6 +358,8 @@ def main():
     elif args.mode == "json":
         import numpy as np
         sig = get_signal(df)
+        futures = get_futures_signal(df)
+        sig["futures"] = futures
 
         def convert(obj):
             if isinstance(obj, (np.bool_,)):
@@ -331,10 +373,14 @@ def main():
         print(json.dumps(sig, indent=2, default=convert))
     elif args.mode == "alert":
         sig = get_signal(df)
+        futures = get_futures_signal(df)
         if sig["signal"] != "NEUTRAL":
             print_signal(sig, args.symbol, args.timeframe)
         else:
             print(f"⚪ Không có tín hiệu. RSI={sig['rsi']}, Trend={sig['trend']}")
+        if futures["direction"] != "NEUTRAL":
+            from telegram_alert import send_futures_alert
+            send_futures_alert(futures)
     else:
         sig = get_signal(df)
         print_signal(sig, args.symbol, args.timeframe)
